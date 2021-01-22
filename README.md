@@ -7,7 +7,7 @@ by Joe McKenzie / Chupi
 October 11, 2011  
 This is the same content as README.txt, except reformatted into basic Markdown.
 
-![Bild](https://github.com/petersieg/xlinux/blob/master/xlinux.jpg)
+![Bild](https://github.com/petersieg/oscilloscope-asteroids/blob/master/asteroids.JPG)
 
 I've seen some YouTube videos where people made games on oscilloscopes. But
 all those use "fancy" setups, like a digital scope with 2 beams and an FPGA to
