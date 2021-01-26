@@ -34,8 +34,8 @@
 #            -Joe McKenzie / Chupi
 
 CC=gcc
-CFLAGS=$(shell sdl-config --cflags)
-LDFLAGS=$(shell sdl-config --libs)
+CFLAGS=-lm $(shell sdl-config --cflags)
+LDFLAGS=-lm $(shell sdl-config --libs)
 
 HFILES=asteroids_objects.h gfx.h
 EXEC=asteroids-scope asteroids-window
