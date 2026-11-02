@@ -1,0 +1,48 @@
+ChatGPT 2026-11-02 P.Sieg
+
+Bitte erstelle eine html Seite mit Javascript zur Anzeige von Lissajous Figuren über Audio Out auf 
+einem Oszilloskop. Frequenzen und Phase der beiden Frequenzen auf rechten und linken Kanal sollten 
+über die html Seite einstellbar sein. Ideal auch wenn die Lisajous Figur auf der Webseite angezeigt 
+wird. Beispiel html Seite, welche ein Zeichenbereich über Audio auf einem Oszilloskop darstellt sende 
+ich mit.
+
+---
+
+Ich habe mir deine Beispieldatei OSCDraw angesehen. Sie verwendet bereits die passende Stereo-Audioausgabe 
+für ein Oszilloskop:
+- Rechter Audiokanal = X-Achse
+- Linker Audiokanal = Y-Achse
+Darauf aufbauend erstelle ich eine neue HTML-Seite, bei der die Lissajous-Figur nicht mehr mit der Maus 
+gezeichnet werden muss, sondern mathematisch aus zwei Sinusschwingungen erzeugt wird.
+
+Die Seite bekommt folgende Funktionen:
+- Einstellbare Frequenz für X (rechter Kanal) und Y (linker Kanal).
+- Einstellbare Phasenverschiebung beider Kanäle.
+- Amplitudenregelung.
+- Direkte Darstellung der Lissajous-Figur im Browser.
+- Stereo-Audioausgabe zum Anschluss an ein Oszilloskop im XY-Betrieb.
+- Start- und Stoppfunktion.
+
+---
+
+Ich 
+Lissajous Generator
+Eigenständige HTML-Datei mit integriertem JavaScript. Keine Installation und kein Server erforderlich.
+ HTML-Datei öffnen
+Ein paar Beispiele für die Voreinstellungen:
+Einstellung	Ergebnis
+100 Hz / 100 Hz, 90°	Kreis
+100 Hz / 100 Hz, 35°	Ellipse
+100 Hz / 200 Hz	Acht
+200 Hz / 300 Hz	Lissajous-Figur 2:3
+
+Anschluss am Oszilloskop:
+- Rechter Audioausgang → X-Eingang
+- Linker Audioausgang → Y-Eingang
+- Oszilloskop auf XY-Modus stellen.
+Wichtiger Hinweis: Beim ersten Start bitte die Lautstärke niedrig einstellen. Die Audioausgabe wird direkt über die Web Audio API erzeugt. Die Phasenverschiebungen werden dabei auch tatsächlich im Audiosignal umgesetzt.
+
+Die Datei ist vollständig eigenständig und kann lokal im Browser geöffnet werden.
+
+Viel Spaß beim Experimentieren!
+
