@@ -1,0 +1,489 @@
+
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Analoge XY-Uhr</title>
+<style>
+  body {
+    margin: 0;
+    padding: 20px;
+    background: #171717;
+    color: #eee;
+    font-family: Arial, sans-serif;
+    text-align: center;
+  }
+  h2 { margin-top: 0; }
+  canvas {
+    display: block;
+    width: min(90vw, 600px);
+    height: min(90vw, 600px);
+    margin: 15px auto;
+    background: #000;
+    border: 1px solid #444;
+  }
+  button {
+    margin: 5px;
+    padding: 10px 16px;
+    font-size: 15px;
+    cursor: pointer;
+  }
+  #time {
+    font-size: 22px;
+    font-family: monospace;
+    margin: 12px;
+  }
+  #status {
+    color: #aaa;
+    font-size: 13px;
+    margin-top: 12px;
+  }
+</style>
+</head>
+<body>
+
+<h2>Analoge XY-Uhr</h2>
+
+<canvas id="screen" width="700" height="700"></canvas>
+<div id="time">--:--:--</div>
+
+<div>
+  <button id="rotate">90° drehen</button>
+  <button id="mirror">Spiegeln</button>
+</div>
+
+<div>
+  <button id="start">XY-Audio starten</button>
+  <button id="stop">Stop</button>
+</div>
+
+<div id="status">Audioausgabe: Links = Y, Rechts = X</div>
+
+<script>
+"use strict";
+
+const canvas = document.getElementById("screen");
+const ctx = canvas.getContext("2d");
+const timeDisplay = document.getElementById("time");
+const statusDisplay = document.getElementById("status");
+
+const SIZE = 700;
+const CENTER = SIZE / 2;
+const RADIUS = 285;
+
+// Benutzer-Drehung. Browser startet bei 0°, Audio bei 90°.
+let rotation = 0;
+let mirrored = false;
+
+let audioContext = null;
+let nextAudioTime = 0;
+let audioTimer = null;
+let audioRunning = false;
+
+// Audioeinstellungen
+const SAMPLE_RATE = 44100;
+const CHUNK_DURATION = 0.2;
+const CYCLE_DURATION = 0.05;
+const CYCLES_PER_CHUNK = 4;
+
+const SAMPLES_PER_CYCLE =
+  Math.round(SAMPLE_RATE * CYCLE_DURATION);
+
+const SAMPLES_PER_CHUNK =
+  SAMPLES_PER_CYCLE * CYCLES_PER_CHUNK;
+
+
+/*
+  Transformation der Koordinaten.
+
+  Browser:
+    rotation
+
+  XY-Audio:
+    rotation + 90 Grad
+*/
+
+function transformPoint(x, y, audioMode = false) {
+  const angle = (rotation + (audioMode ? 90 : 0)) * Math.PI / 180;
+
+  let rx = x * Math.cos(angle) - y * Math.sin(angle);
+  let ry = x * Math.sin(angle) + y * Math.cos(angle);
+
+  if (mirrored) rx = -rx;
+
+  return { x: rx, y: ry };
+}
+
+
+/*
+  Geometrie der Uhr.
+  Es gibt nur zwölf 5-Minuten-Markierungen
+  und drei einfache Zeigerlinien.
+*/
+
+function clockGeometry(date, audioMode = false) {
+  const sec = date.getSeconds() + date.getMilliseconds() / 1000;
+  const min = date.getMinutes() + sec / 60;
+  const hour = (date.getHours() % 12) + min / 60;
+
+  const ticks = [];
+
+  for (let i = 0; i < 12; i++) {
+    const angle = i * Math.PI / 6;
+
+    const outer = {
+      x: Math.sin(angle) * RADIUS,
+      y: -Math.cos(angle) * RADIUS
+    };
+
+    const inner = {
+      x: Math.sin(angle) * (RADIUS - 24),
+      y: -Math.cos(angle) * (RADIUS - 24)
+    };
+
+    ticks.push([
+      transformPoint(outer.x, outer.y, audioMode),
+      transformPoint(inner.x, inner.y, audioMode)
+    ]);
+  }
+
+  const hands = [];
+
+  // Stundenzeiger
+  const hourAngle = hour * Math.PI / 6;
+  hands.push([
+    transformPoint(0, 0, audioMode),
+    transformPoint(
+      Math.sin(hourAngle) * 155,
+      -Math.cos(hourAngle) * 155,
+      audioMode
+    )
+  ]);
+
+  // Minutenzeiger
+  const minuteAngle = min * Math.PI / 30;
+  hands.push([
+    transformPoint(0, 0, audioMode),
+    transformPoint(
+      Math.sin(minuteAngle) * 225,
+      -Math.cos(minuteAngle) * 225,
+      audioMode
+    )
+  ]);
+
+  // Sekundenzeiger
+  const secondAngle = sec * Math.PI / 30;
+  hands.push([
+    transformPoint(0, 0, audioMode),
+    transformPoint(
+      Math.sin(secondAngle) * 260,
+      -Math.cos(secondAngle) * 260,
+      audioMode
+    )
+  ]);
+
+  return { ticks, hands };
+}
+
+
+/*
+  Browser-Vorschau
+*/
+
+function drawPreview() {
+  const now = new Date();
+
+  timeDisplay.textContent =
+    now.toLocaleTimeString("de-DE", { hour12: false });
+
+  ctx.clearRect(0, 0, SIZE, SIZE);
+  ctx.save();
+  ctx.translate(CENTER, CENTER);
+
+  const geometry = clockGeometry(now, false);
+
+  ctx.strokeStyle = "#00ff55";
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  for (const stroke of geometry.ticks) {
+    ctx.beginPath();
+    ctx.moveTo(stroke[0].x, stroke[0].y);
+    ctx.lineTo(stroke[1].x, stroke[1].y);
+    ctx.stroke();
+  }
+
+  for (const stroke of geometry.hands) {
+    ctx.beginPath();
+    ctx.moveTo(stroke[0].x, stroke[0].y);
+    ctx.lineTo(stroke[1].x, stroke[1].y);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+  requestAnimationFrame(drawPreview);
+}
+
+
+/*
+  XY-Vektorpfad.
+
+  Die Markierungen werden im Kreis durchlaufen.
+  Nach der zwölften Markierung wird ausdrücklich
+  zur ersten Markierung zurückgeführt.
+
+  Jeder Strich wird vorwärts und rückwärts gezeichnet.
+  Verbindungswege werden schneller durchlaufen.
+*/
+
+function makeVectorSegments(date) {
+  const geometry = clockGeometry(date, true);
+  const segments = [];
+
+  function addSegment(a, b, connector = false) {
+    segments.push({ a, b, connector });
+  }
+
+  // Zwölf Markierungen
+  for (let i = 0; i < geometry.ticks.length; i++) {
+    const a = geometry.ticks[i][0];
+    const b = geometry.ticks[i][1];
+
+    if (i > 0) {
+      const previous = geometry.ticks[i - 1][0];
+      addSegment(previous, a, true);
+    }
+
+    // Markierung hin und zurück
+    addSegment(a, b, false);
+    addSegment(b, a, false);
+  }
+
+  // Expliziter Schluss zwischen 11 und 12 Uhr
+  const lastTick = geometry.ticks[geometry.ticks.length - 1][0];
+  const firstTick = geometry.ticks[0][0];
+  addSegment(lastTick, firstTick, true);
+
+  // Übergang von der letzten Markierung zum Zentrum
+  const center = geometry.hands[0][0];
+  addSegment(firstTick, center, true);
+
+  // Drei Zeiger
+  for (const hand of geometry.hands) {
+    const a = hand[0];
+    const b = hand[1];
+
+    addSegment(a, b, false);
+    addSegment(b, a, false);
+  }
+
+  // Rückweg zum Startpunkt für einen geschlossenen Umlauf
+  const lastHand = geometry.hands[geometry.hands.length - 1][0];
+  addSegment(lastHand, firstTick, true);
+
+  return segments;
+}
+
+
+/*
+  Vektoren gleichmäßig auf die Samples verteilen.
+  Verbindungswege bekommen weniger Zeit und damit
+  eine geringere sichtbare Helligkeit.
+*/
+
+function sampleVectorPath(date, sampleCount) {
+  const segments = makeVectorSegments(date);
+
+  const weighted = segments.map(segment => {
+    const dx = segment.b.x - segment.a.x;
+    const dy = segment.b.y - segment.a.y;
+    const length = Math.sqrt(dx * dx + dy * dy);
+
+    const weight = length * (segment.connector ? 0.045 : 1);
+
+    return { ...segment, weight };
+  });
+
+  const totalWeight = weighted.reduce(
+    (sum, segment) => sum + segment.weight, 0
+  );
+
+  const xs = new Float32Array(sampleCount);
+  const ys = new Float32Array(sampleCount);
+
+  let segmentIndex = 0;
+  let segmentStart = 0;
+
+  for (let i = 0; i < sampleCount; i++) {
+    const position = (i / sampleCount) * totalWeight;
+
+    while (
+      segmentIndex < weighted.length - 1 &&
+      position >= segmentStart + weighted[segmentIndex].weight
+    ) {
+      segmentStart += weighted[segmentIndex].weight;
+      segmentIndex++;
+    }
+
+    const segment = weighted[segmentIndex];
+
+    const local = segment.weight > 0
+      ? (position - segmentStart) / segment.weight
+      : 0;
+
+    const t = Math.max(0, Math.min(1, local));
+
+    xs[i] = (
+      segment.a.x + (segment.b.x - segment.a.x) * t
+    ) / RADIUS;
+
+    ys[i] = (
+      segment.a.y + (segment.b.y - segment.a.y) * t
+    ) / RADIUS;
+  }
+
+  return { xs, ys };
+}
+
+
+/*
+  Erzeugt einen zusammenhängenden Audioblock.
+  Vier vollständige Vektor-Umläufe pro Block.
+*/
+
+function createAudioBuffer(startTime) {
+  const frameCount = SAMPLES_PER_CHUNK;
+
+  const buffer = audioContext.createBuffer(
+    2,
+    frameCount,
+    audioContext.sampleRate
+  );
+
+  const left = buffer.getChannelData(0);   // Y
+  const right = buffer.getChannelData(1);  // X
+
+  const epochAtStart =
+    Date.now() +
+    (startTime - audioContext.currentTime) * 1000;
+
+  for (let cycle = 0; cycle < CYCLES_PER_CHUNK; cycle++) {
+    const cycleTime =
+      epochAtStart + cycle * CYCLE_DURATION * 1000;
+
+    const vectors = sampleVectorPath(
+      new Date(cycleTime),
+      SAMPLES_PER_CYCLE
+    );
+
+    const offset = cycle * SAMPLES_PER_CYCLE;
+
+    for (let i = 0; i < SAMPLES_PER_CYCLE; i++) {
+      const index = offset + i;
+
+      left[index] = vectors.ys[i] * 0.85;
+      right[index] = vectors.xs[i] * 0.85;
+    }
+  }
+
+  return buffer;
+}
+
+
+/*
+  Audio vorausschauend planen.
+  Der Zeitpuffer verhindert Lücken zwischen den Blöcken.
+*/
+
+function scheduleAudio() {
+  if (!audioRunning || !audioContext) return;
+
+  const now = audioContext.currentTime;
+  const scheduleAhead = 0.8;
+
+  while (nextAudioTime < now + scheduleAhead) {
+    const buffer = createAudioBuffer(nextAudioTime);
+    const source = audioContext.createBufferSource();
+
+    source.buffer = buffer;
+    source.connect(audioContext.destination);
+    source.start(nextAudioTime);
+
+    nextAudioTime += CHUNK_DURATION;
+  }
+}
+
+
+async function startAudio() {
+  if (audioRunning) return;
+
+  try {
+    const AudioContextClass =
+      window.AudioContext || window.webkitAudioContext;
+
+    if (!AudioContextClass) {
+      throw new Error(
+        "Web Audio wird von diesem Browser nicht unterstützt."
+      );
+    }
+
+    audioContext = new AudioContextClass({
+      sampleRate: SAMPLE_RATE
+    });
+
+    await audioContext.resume();
+
+    audioRunning = true;
+    nextAudioTime = audioContext.currentTime + 0.1;
+
+    scheduleAudio();
+
+    // Häufiger nachplanen, damit der Audiopuffer nicht leerläuft.
+    audioTimer = setInterval(scheduleAudio, 40);
+
+    statusDisplay.textContent =
+      "XY-Audio läuft – Links = Y, Rechts = X – Audio um 90° gedreht";
+
+  } catch (error) {
+    statusDisplay.textContent = "Audiofehler: " + error.message;
+  }
+}
+
+
+async function stopAudio() {
+  audioRunning = false;
+
+  if (audioTimer) {
+    clearInterval(audioTimer);
+    audioTimer = null;
+  }
+
+  if (audioContext) {
+    await audioContext.close();
+    audioContext = null;
+  }
+
+  statusDisplay.textContent = "Audio gestoppt.";
+}
+
+
+// Drehung in 90-Grad-Schritten
+document.getElementById("rotate").addEventListener("click", () => {
+  rotation = (rotation + 90) % 360;
+});
+
+// Spiegelung
+document.getElementById("mirror").addEventListener("click", () => {
+  mirrored = !mirrored;
+});
+
+document.getElementById("start").addEventListener("click", startAudio);
+document.getElementById("stop").addEventListener("click", stopAudio);
+
+drawPreview();
+</script>
+
+</body>
+</html>
