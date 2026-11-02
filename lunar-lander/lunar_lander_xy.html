@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lunar Lander – Audio XY - ChatGPT 2026-11-02 P.Sieg</title>
+<style>
+:root{color-scheme:dark;--bg:#10151d;--panel:#1a2430;--line:#2d3a49;--text:#edf3f8;--muted:#a9b8c7;--accent:#63d6b2}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:1120px;margin:auto;padding:24px}
+h1{margin:0 0 6px;font-size:clamp(1.6rem,4vw,2.3rem)}
+.intro{color:var(--muted);margin:0 0 22px}
+.layout{display:grid;grid-template-columns:minmax(300px,1.15fr) minmax(290px,.85fr);gap:18px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;min-width:0}
+canvas{display:block;width:100%;aspect-ratio:1;background:#080d12;border:1px solid #344454;border-radius:10px}
+.readout{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;color:var(--muted);font-size:.9rem;margin-top:10px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+.stat{background:#111923;border:1px solid var(--line);border-radius:9px;padding:8px 10px}
+.stat span{display:block;color:var(--muted);font-size:.78rem}.stat strong{font-size:1.05rem;font-variant-numeric:tabular-nums}
+h2{font-size:1.1rem;margin:0 0 16px}
+.controls{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.control{min-width:0}
+label{display:flex;justify-content:space-between;gap:8px;font-weight:600;margin-bottom:7px}
+output{color:var(--accent);font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.unit{color:var(--muted);font-size:.85rem;margin-top:4px}
+.actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
+button{border:0;border-radius:9px;padding:11px 16px;font:600 1rem system-ui;cursor:pointer;background:var(--accent);color:#092018}
+button.secondary{background:#334253;color:var(--text)}
+button:disabled{opacity:.45;cursor:not-allowed}
+.status{margin-top:14px;color:var(--muted);font-size:.9rem;min-height:2.6em}
+.note{margin-top:18px;padding:13px 15px;border-left:3px solid var(--accent);background:#14221f;border-radius:5px;color:#c9ded8;font-size:.9rem}
+.keygrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:16px;max-width:330px}
+.keygrid button{padding:12px 8px;background:#334253;color:var(--text);touch-action:none;user-select:none}
+.keygrid button.active,.keygrid button:active{background:var(--accent);color:#092018}
+.keygrid .empty{visibility:hidden}
+.legend{font-size:.88rem;color:var(--muted);margin-top:14px}
+@media(max-width:760px){main{padding:14px}.layout{grid-template-columns:1fr}.controls{gap:14px}}
+</style>
+</head>
+<body>
+<main>
+  <h1>Lunar Lander – Audio XY</h1>
+  <p class="intro">Landefähre sicher auf der Plattform absetzen – die Vektorgrafik wird gleichzeitig als Stereo-Audiosignal für dein XY-Oszilloskop ausgegeben. ChatGPT 2026-11-02 P.Sieg</p>
+  <div class="layout">
+    <section class="panel">
+      <canvas id="scope" width="800" height="800" aria-label="Lunar-Lander-Spiel"></canvas>
+      <div class="readout"><span id="state">Bereit zum Start</span><span id="level">Level 1</span></div>
+      <div class="stats">
+        <div class="stat"><span>Höhe</span><strong id="alt">—</strong></div>
+        <div class="stat"><span>Horizontal</span><strong id="vx">0.0</strong></div>
+        <div class="stat"><span>Vertikal</span><strong id="vy">0.0</strong></div>
+        <div class="stat"><span>Treibstoff</span><strong id="fuel">100%</strong></div>
+        <div class="stat"><span>Punkte</span><strong id="score">0</strong></div>
+        <div class="stat"><span>Schwerkraft</span><strong>1.0 g</strong></div>
+      </div>
+      <div class="actions">
+        <button id="start">Spiel starten</button>
+        <button id="reset" class="secondary">Neu starten</button>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>Steuerung &amp; XY-Ausgabe</h2>
+      <div class="controls">
+        <div class="control">
+          <label for="gain">Audio-Pegel <output id="gainOut">75 %</output></label>
+          <input id="gain" type="range" min="5" max="100" value="75">
+          <div class="unit">Bei Übersteuerung reduzieren.</div>
+        </div>
+        <div class="control">
+          <label for="detail">Vektor-Detail <output id="detailOut">Mittel</output></label>
+          <input id="detail" type="range" min="1" max="3" step="1" value="2">
+          <div class="unit">Weniger Details = weniger Linien.</div>
+        </div>
+      </div>
+      <div class="keygrid" aria-label="Touch-Steuerung">
+        <span class="empty"></span><button data-key="up">▲ Schub</button><span class="empty"></span>
+        <button data-key="left">↶ Links</button><button data-key="down">▼</button><button data-key="right">Rechts ↷</button>
+      </div>
+      <div class="legend">
+        **Tastatur:** Pfeil links/rechts = drehen, Pfeil hoch = Triebwerk. Auf Mobilgeräten die Tasten gedrückt halten.
+      </div>
+      <div class="note">
+        <strong>Landeregeln:</strong> Möglichst senkrecht auf der markierten Plattform landen. Die Landefähre darf beim Aufsetzen höchstens 110 px/s sinken, 80 px/s seitlich driften und nur leicht geneigt sein. Treibstoff ist begrenzt.
+      </div>
+      <div class="status" id="audioStatus">Audio ist ausgeschaltet. Zum Senden an das Oszilloskop auf „XY-Audio starten“ klicken.</div>
+      <div class="actions">
+        <button id="audioStart">XY-Audio starten</button>
+        <button id="audioStop" class="secondary" disabled>Audio stoppen</button>
+      </div>
+      <p class="legend">Audio-Kanäle: rechts = X, links = Y. Die Spielgrafik wird als fortlaufender Vektorpfad ausgegeben. Der Spielablauf ist gegenüber der ersten Version verlangsamt. Kopfhörer bitte nicht verwenden – die Ausgabe ist für den XY-Eingang gedacht.</p>
+    </section>
+  </div>
+</main>
+<script>
+(()=>{
+const $=id=>document.getElementById(id), canvas=$('scope'),ctx=canvas.getContext('2d');
+const W=800,H=800, keys={left:false,right:false,up:false,down:false};
+let running=false,finished=false,won=false,score=0,level=1,last=0,raf=0;
+let ship,terrain=[],pad={x1:510,x2:650,y:625},fuel=100;
+let audioCtx=null,processor=null,master=null,audioOn=false,scopePath=[],phase=0,keepAliveOsc=null,keepAliveGain=null;
+const gravity=105, thrust=250, rotateSpeed=2.7;
+function makeTerrain(){
+  const pts=[[0,650],[65,625],[130,650],[205,600],[280,635],[350,610],[425,655],[490,625],[pad.x1,pad.y]];
+  // Pad is kept horizontal; terrain resumes at its far edge.
+  pts.push([pad.x2,pad.y],[700,645],[745,610],[800,640]);
+  terrain=pts;
+}
+function reset(){
+const startX = Math.random() < 0.5
+  ? 200 + Math.random() * 300
+  : 400 + Math.random() * 200;
+
+  ship={x:startX,y:175,vx:0,vy:0,a:0};
+  makeTerrain();fuel=120;finished=false;won=false;running=false;
+
+  $('state').textContent='Bereit zum Start';$('level').textContent='Level '+level;
+  updateStats();draw();
+}
+function start(){if(finished)reset();running=true;$('state').textContent='Flug läuft';last=0;}
+function updateStats(){
+ $('alt').textContent=Math.max(0,Math.round((pad.y-ship.y)/8))+' m';
+ $('vx').textContent=(ship.vx/8).toFixed(1)+' m/s';
+ $('vy').textContent=(ship.vy/8).toFixed(1)+' m/s';
+ $('fuel').textContent=Math.round(fuel)+'%';$('score').textContent=score;
+}
+function shipPoints(){
+ const c=Math.cos(ship.a),s=Math.sin(ship.a);
+ const local=[[-13,15],[0,-20],[13,15],[0,10],[-13,15],[-19,24],[-9,20],[9,20],[19,24]];
+ return local.map(([x,y])=>[ship.x+x*c-y*s,ship.y+x*s+y*c]);
+}
+function segments(){
+ const seg=[];
+ const add=(a,b)=>seg.push([a[0],a[1],b[0],b[1]]);
+ // Ground as one continuous broken-looking mountain contour.
+ for(let i=1;i<terrain.length;i++)add(terrain[i-1],terrain[i]);
+ // Landing pad and approach markers.
+ add([pad.x1-12,pad.y-10],[pad.x2+12,pad.y-10]);
+ add([pad.x1,pad.y-3],[pad.x1,pad.y+5]);add([pad.x2,pad.y-3],[pad.x2,pad.y+5]);
+ // Lander outline and landing struts.
+ const p=shipPoints();
+ add(p[0],p[1]);add(p[1],p[2]);add(p[2],p[3]);add(p[3],p[0]);
+ add(p[4],p[5]);add(p[5],p[6]);add(p[6],p[7]);add(p[7],p[8]);add(p[8],p[2]);
+ // Flame is a simple open chevron, visible while thrusting.
+ if(keys.up&&fuel>0&&running){
+   const c=Math.cos(ship.a),s=Math.sin(ship.a);
+   const base=[ship.x-10*s,ship.y+10*c],tip=[ship.x+Math.sin(ship.a)*35,ship.y-Math.cos(ship.a)*35];
+   const l=[tip[0]-5*c,tip[1]-5*s],r=[tip[0]+5*c,tip[1]+5*s];
+   add(base,l);add(l,r);add(r,base);
+ }
+ // Sparse stars; reduce clutter at lower detail.
+ const count=Number($('detail').value)===1?5:Number($('detail').value)===2?9:14;
+ for(let i=0;i<count;i++){
+   const x=(i*137+43)%760+20,y=(i*211+77)%500+25;
+   add([x-2,y],[x+2,y]);add([x,y-2],[x,y+2]);
+ }
+ return seg;
+}
+function draw(){
+ ctx.clearRect(0,0,W,H);
+ ctx.fillStyle='#080d12';ctx.fillRect(0,0,W,H);
+ // Stars and subtle grid.
+ ctx.strokeStyle='#172432';ctx.lineWidth=1;
+ for(let x=100;x<W;x+=100){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+ for(let y=100;y<H;y+=100){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+ ctx.strokeStyle='#536879';ctx.lineWidth=2;ctx.beginPath();
+ terrain.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));ctx.stroke();
+ ctx.strokeStyle='#63d6b2';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(pad.x1-12,pad.y-10);ctx.lineTo(pad.x2+12,pad.y-10);ctx.stroke();
+ ctx.beginPath();ctx.moveTo(pad.x1,pad.y-3);ctx.lineTo(pad.x1,pad.y+5);ctx.moveTo(pad.x2,pad.y-3);ctx.lineTo(pad.x2,pad.y+5);ctx.stroke();
+ // Ship.
+ const p=shipPoints();ctx.strokeStyle=finished?(won?'#63d6b2':'#ff6b6b'):'#edf3f8';ctx.lineWidth=3;
+ ctx.beginPath();ctx.moveTo(...p[0]);ctx.lineTo(...p[1]);ctx.lineTo(...p[2]);ctx.lineTo(...p[3]);ctx.closePath();
+ ctx.moveTo(...p[4]);ctx.lineTo(...p[5]);ctx.lineTo(...p[6]);ctx.lineTo(...p[7]);ctx.lineTo(...p[8]);ctx.lineTo(...p[2]);ctx.stroke();
+ if(keys.up&&fuel>0&&running){
+   const c=Math.cos(ship.a),s=Math.sin(ship.a),base=[ship.x-10*s,ship.y+10*c],tip=[ship.x+Math.sin(ship.a)*35,ship.y-Math.cos(ship.a)*35];
+   ctx.strokeStyle='#ffb45e';ctx.beginPath();ctx.moveTo(...base);ctx.lineTo(tip[0]-5*c,tip[1]-5*s);ctx.lineTo(tip[0]+5*c,tip[1]+5*s);ctx.closePath();ctx.stroke();
+ }
+ ctx.fillStyle='#a9b8c7';ctx.font='16px system-ui';ctx.fillText('LANDING ZONE',pad.x1+12,pad.y+34);
+ if(finished){ctx.fillStyle=won?'#63d6b2':'#ff8585';ctx.font='bold 32px system-ui';ctx.textAlign='center';ctx.fillText(won?'PERFEKTE LANDUNG!':'ABSTURZ',400,360);ctx.font='17px system-ui';ctx.fillText('„Neu starten“ für einen neuen Versuch',400,392);ctx.textAlign='left';}
+ scopePath=buildScopePath(segments());
+}
+function buildScopePath(segs){
+ const detail=Number($('detail').value);
+ const points=[];
+ const add=(x,y)=>points.push([x,y]);
+ // Each stroke is sampled, with short fast repositioning between strokes.
+ // This is the same stereo XY principle as the Lissajous generator:
+ // X -> right channel, Y -> left channel.
+ const drawSteps=detail===1?5:detail===2?8:12;
+ const moveSteps=detail===1?2:detail===2?3:4;
+ for(const s of segs){
+   const [x1,y1,x2,y2]=s;
+   if(points.length){
+     const prev=points[points.length-1];
+     for(let j=1;j<=moveSteps;j++){const t=j/moveSteps;add(prev[0]+(x1-prev[0])*t,prev[1]+(y1-prev[1])*t);}
+   }else add(x1,y1);
+   for(let j=1;j<=drawSteps;j++){const t=j/drawSteps;add(x1+(x2-x1)*t,y1+(y2-y1)*t);}
+ }
+ return points.length>2?points:[[400,400],[400,400]];
+}
+function crash(){
+ running=false;finished=true;won=false;keys.up=false;
+ $('state').textContent='Abgestürzt';draw();updateStats();
+}
+function land(){
+ running=false;finished=true;won=true;
+ const bonus=Math.round(fuel*10+Math.max(0,100-Math.abs(ship.vx)-Math.abs(ship.vy))*3);
+ score+=bonus;$('state').textContent='Sicher gelandet! +'+bonus;draw();updateStats();
+}
+function step(dt){
+ if(!running||finished)return;
+ const turn=(keys.right?1:0)-(keys.left?1:0);
+ ship.a+=turn*rotateSpeed*dt;
+ if(keys.up&&fuel>0){
+   ship.vx+=Math.sin(ship.a)*thrust*dt;
+   ship.vy-=Math.cos(ship.a)*thrust*dt;
+   fuel=Math.max(0,fuel-19*dt);
+ }
+ ship.vy+=gravity*dt;ship.x+=ship.vx*dt;ship.y+=ship.vy*dt;
+ // Side walls are solid.
+ if(ship.x<20||ship.x>780){crash();return;}
+ const footY=ship.y+24*Math.cos(ship.a);
+ if(footY>=pad.y-1){
+   const onPad=ship.x>pad.x1+18&&ship.x<pad.x2-18;
+   const upright=Math.abs(ship.a)<0.20;
+   if(onPad&&upright&&Math.abs(ship.vx)<80&&ship.vy<110&&ship.vy>-50)land(); // <40 <55 >-25
+   else crash();
+   return;
+ }
+ if(ship.y>H-60){crash();return;} // -30
+ updateStats();
+}
+function loop(t){
+ const rawDt=last?Math.min(.035,(t-last)/1000):0;last=t;
+ const dt=rawDt*0.24; // bewusst gemächlicherer Spielablauf
+ step(dt);draw();
+ raf=requestAnimationFrame(loop);
+}
+function startLoop(){if(!raf)raf=requestAnimationFrame(loop);}
+function stopAudio(){
+ if(processor){processor.disconnect();processor.onaudioprocess=null;processor=null;}
+ if(keepAliveOsc){try{keepAliveOsc.stop();}catch(e){}keepAliveOsc.disconnect();keepAliveOsc=null;}
+ if(keepAliveGain){keepAliveGain.disconnect();keepAliveGain=null;}
+ if(master){master.disconnect();master=null;}
+ audioOn=false;$('audioStart').disabled=false;$('audioStop').disabled=true;
+ $('audioStatus').textContent='Audio ist ausgeschaltet.';
+}
+async function startAudio(){
+ try{
+  if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+  if(audioCtx.state==='suspended')await audioCtx.resume();
+  stopAudio();
+  const bufferSize=4096;
+  // Ein stummer Eingang hält ScriptProcessor auch in Browsern am Leben,
+  // die Nodes mit null Eingangskanälen nicht zuverlässig verarbeiten.
+  processor=audioCtx.createScriptProcessor(bufferSize,1,2);
+  master=audioCtx.createGain();master.gain.value=1;
+  keepAliveOsc=audioCtx.createOscillator();
+  keepAliveGain=audioCtx.createGain();
+  keepAliveOsc.frequency.value=220;
+  keepAliveGain.gain.value=0;
+  keepAliveOsc.connect(keepAliveGain);
+  keepAliveGain.connect(processor);
+  processor.onaudioprocess=e=>{
+    const left=e.outputBuffer.getChannelData(1),right=e.outputBuffer.getChannelData(0);
+    const path=scopePath,n=path.length,gain=Number($('gain').value)/100;
+    if(n<2){left.fill(0);right.fill(0);return;}
+    const rate=60/audioCtx.sampleRate;
+    for(let i=0;i<left.length;i++){
+      const pos=phase*n,idx=Math.floor(pos),u=pos-idx;
+      const a=path[idx%n],b=path[(idx+1)%n];
+      const x=a[0]+(b[0]-a[0])*u,y=a[1]+(b[1]-a[1])*u;
+      // XY coordinate is emitted continuously: right = X, left = Y.
+      right[i]=((x/W)*2-1)*gain;
+      left[i]=(1-(y/H)*2)*gain;
+      phase+=rate;if(phase>=1)phase-=1;
+    }
+  };
+  processor.connect(master);master.connect(audioCtx.destination);
+  keepAliveOsc.start();
+  audioOn=true;$('audioStart').disabled=true;$('audioStop').disabled=false;
+  $('audioStatus').textContent='XY-Audio aktiv · rechts = X · links = Y · 60 Vektor-Durchläufe/s · '+audioCtx.sampleRate+' Hz';
+ }catch(e){stopAudio();$('audioStatus').textContent='Audio konnte nicht gestartet werden: '+e.message;}
+}
+function updateSettings(){
+ $('gainOut').textContent=$('gain').value+' %';
+ $('detailOut').textContent=['','Niedrig','Mittel','Hoch'][Number($('detail').value)];
+ draw();
+}
+$('start').addEventListener('click',()=>{start();startLoop();});
+$('reset').addEventListener('click',()=>{reset();startLoop();});
+$('audioStart').addEventListener('click',startAudio);
+$('audioStop').addEventListener('click',stopAudio);
+$('gain').addEventListener('input',()=> $('gainOut').textContent=$('gain').value+' %');
+$('detail').addEventListener('input',updateSettings);
+window.addEventListener('keydown',e=>{
+ const map={ArrowLeft:'left',ArrowRight:'right',ArrowUp:'up',ArrowDown:'down',a:'left',d:'right',w:'up'};
+ const k=map[e.key];if(k){keys[k]=true;e.preventDefault();}
+ if(e.key==='Enter'&&!running){start();startLoop();}
+});
+window.addEventListener('keyup',e=>{
+ const map={ArrowLeft:'left',ArrowRight:'right',ArrowUp:'up',ArrowDown:'down',a:'left',d:'right',w:'up'};
+ const k=map[e.key];if(k){keys[k]=false;e.preventDefault();}
+});
+window.addEventListener('blur',()=>Object.keys(keys).forEach(k=>keys[k]=false));
+document.querySelectorAll('[data-key]').forEach(b=>{
+ const k=b.dataset.key;
+ const down=e=>{e.preventDefault();keys[k]=true;b.classList.add('active');};
+ const up=e=>{e.preventDefault();keys[k]=false;b.classList.remove('active');};
+ b.addEventListener('pointerdown',down);b.addEventListener('pointerup',up);b.addEventListener('pointercancel',up);b.addEventListener('pointerleave',up);
+});
+window.addEventListener('beforeunload',stopAudio);
+reset();updateSettings();startLoop();
+})();
+</script>
+</body>
+</html>
