@@ -1,5 +1,18 @@
 # oscilloscope-asteroids
 
+### There is now a lot more for xy oscilloscope created by ChatGPT in javascript
+
+clock2 - Clock Display
+
+function-generator - as name implies - two channel
+
+lissajous - generate such figures
+
+lunar-lander - guess what ;-)
+
+tennis42 - the historic tennis for two game
+
+
 Asteroids clone for oscilloscope
 ================================
 
