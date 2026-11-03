@@ -2,6 +2,8 @@
 
 ### Notes
 
+AVR Implementierung: http://www.evilmadscientist.com/2008/resurrecting-tennis-for-two-a-video-game-from-1958
+
 Transcript mit ChatGPT in pdf Datei.
 
 Alle Versionen bis zur "fertigen" Version v8 sind hierher kopiert.
@@ -12,11 +14,11 @@ Hier wurde das Ursprungsprojekt in eine Javascript Adaption umgesetzt - OHNE - d
 Wir haben das ursprüngliche Projekt funktional in JavaScript nachgebildet, aber nicht den originalen AVR-Code ausgeführt.
 
 Der Unterschied ist:
-Unsere Umsetzung	AVR-Emulator-Ansatz
-Spielmechanik direkt in JavaScript programmiert	Originaler AVR-Assembler- oder C-Code bleibt erhalten
-Ballphysik wird durch JavaScript berechnet	AVR-Code wird von einer virtuellen AVR-CPU ausgeführt
-Poti, Tastatur und Spielablauf sind JavaScript-Funktionen	Ein- und Ausgänge des AVR werden emuliert
-Audioausgabe über Web Audio API	Emulierte AVR-Ausgänge werden in Audio-/XY-Signale umgesetzt
+Unsere Umsetzung	                                          AVR-Emulator-Ansatz
+Spielmechanik direkt in JavaScript programmiert	            Originaler AVR-Assembler- oder C-Code bleibt erhalten
+Ballphysik wird durch JavaScript berechnet	                AVR-Code wird von einer virtuellen AVR-CPU ausgeführt
+Poti, Tastatur und Spielablauf sind JavaScript-Funktionen	  Ein- und Ausgänge des AVR werden emuliert
+Audioausgabe über Web Audio API	                            Emulierte AVR-Ausgänge werden in Audio-/XY-Signale umgesetzt
 
 Das bedeutet: Unsere Version orientiert sich am Prinzip von Tennis for Two und erzeugt eine vergleichbare Funktionalität. Sie ist aber keine originalgetreue Portierung der AVR-Implementierung.
 
