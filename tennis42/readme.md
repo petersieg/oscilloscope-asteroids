@@ -10,7 +10,8 @@ Transcript mit ChatGPT in pdf Datei.
 
 Alle Versionen bis zur "fertigen" Version v8 sind hierher kopiert.
 
-Hier wurde das Ursprungsprojekt in eine Javascript Adaption umgesetzt - OHNE - den original AVR Code in einem Javascript AVR Emulator zu verwenden.
+Hier wurde das Ursprungsprojekt in eine Javascript Adaption umgesetzt - OHNE - den original AVR Code in einem Javascript 
+AVR Emulator zu verwenden.
 
 ```
 Wir haben das ursprüngliche Projekt funktional in JavaScript nachgebildet, aber nicht den originalen AVR-Code ausgeführt.
@@ -22,9 +23,11 @@ Ballphysik wird durch JavaScript berechnet	                AVR-Code wird von ein
 Poti, Tastatur und Spielablauf sind JavaScript-Funktionen	  Ein- und Ausgänge des AVR werden emuliert
 Audioausgabe über Web Audio API	                            Emulierte AVR-Ausgänge werden in Audio-/XY-Signale umgesetzt
 
-Das bedeutet: Unsere Version orientiert sich am Prinzip von Tennis for Two und erzeugt eine vergleichbare Funktionalität. Sie ist aber keine originalgetreue Portierung der AVR-Implementierung.
+Das bedeutet: Unsere Version orientiert sich am Prinzip von Tennis for Two und erzeugt eine vergleichbare Funktionalität.
+Sie ist aber keine originalgetreue Portierung der AVR-Implementierung.
 
-Ein AVR-Emulator wäre ein anderer und durchaus interessanter Ansatz: Man könnte versuchen, den originalen AVR-Code unverändert im Browser auszuführen und dessen Ausgänge auf die Stereo-Audioausgabe abzubilden.
+Ein AVR-Emulator wäre ein anderer und durchaus interessanter Ansatz: Man könnte versuchen, den originalen AVR-Code unverändert
+im Browser auszuführen und dessen Ausgänge auf die Stereo-Audioausgabe abzubilden.
 
 Das wäre dann tatsächlich eine Emulation der ursprünglichen Hardware-Implementierung und nicht nur eine JavaScript-Neuimplementierung.
 ```
