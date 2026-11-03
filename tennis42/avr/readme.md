@@ -8,5 +8,11 @@ Pictures are from my build in 2013:
 
 ![T42-1](https://github.com/petersieg/oscilloscope-asteroids/blob/master/tennis42/avr/T42_top.jpg)
 
+![T42-2](https://github.com/petersieg/oscilloscope-asteroids/blob/master/tennis42/avr/T42_bot.jpg)
+
+![T42-3](https://github.com/petersieg/oscilloscope-asteroids/blob/master/tennis42/avr/T42_ctrl.jpg)
+
+![T42-4](https://github.com/petersieg/oscilloscope-asteroids/blob/master/tennis42/avr/T42_all.jpg)
+
 
 
