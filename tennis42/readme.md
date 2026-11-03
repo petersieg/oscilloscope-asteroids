@@ -6,9 +6,9 @@ Historic background: https://www.m-e-g-a.org/research-education/research/t42-ten
 
 AVR Implementierung: http://www.evilmadscientist.com/2008/resurrecting-tennis-for-two-a-video-game-from-1958
 
-Transcript mit ChatGPT in pdf Datei.
+Transcript mit ChatGPT in pdf Datei bis v8. Danach weitere Versuche die Oszi Darstellung zu verbessern.
 
-Alle Versionen bis zur "fertigen" Version v8 sind hierher kopiert.
+Alle Versionen bis zur "fertigen" Version v10 sind hierher kopiert.
 
 Hier wurde das Ursprungsprojekt in eine Javascript Adaption umgesetzt - OHNE - den original AVR Code in einem Javascript 
 AVR Emulator zu verwenden.
