@@ -2,6 +2,8 @@
 
 ### Notes
 
+Historic background: https://www.m-e-g-a.org/research-education/research/t42-tennis-for-two/
+
 AVR Implementierung: http://www.evilmadscientist.com/2008/resurrecting-tennis-for-two-a-video-game-from-1958
 
 Transcript mit ChatGPT in pdf Datei.
