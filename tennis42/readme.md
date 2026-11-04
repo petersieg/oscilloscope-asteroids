@@ -8,7 +8,7 @@ AVR Implementierung: http://www.evilmadscientist.com/2008/resurrecting-tennis-fo
 
 Transcript mit ChatGPT in pdf Datei bis v8. Danach weitere Versuche die Oszi Darstellung zu verbessern.
 
-Alle Versionen bis zur "fertigen" Version v10 sind hierher kopiert.
+Alle Versionen bis zur "fertigen" Version v11 sind hierher kopiert.
 
 Hier wurde das Ursprungsprojekt in eine Javascript Adaption umgesetzt - OHNE - den original AVR Code in einem Javascript 
 AVR Emulator zu verwenden.
