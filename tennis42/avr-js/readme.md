@@ -10,6 +10,6 @@ Inspired by: https://www.mikrocontroller.net/news/claude-code-trifft-avr-assembl
 
 ChatGPT Transcript in: Tennis42-avr-simulation.pdf
 
-v18 ist as for now final version.
+v18 is for now final version.
 
 
