@@ -10,6 +10,6 @@ Inspired by: https://www.mikrocontroller.net/news/claude-code-trifft-avr-assembl
 
 ChatGPT Transcript in: Tennis42-avr-simulation.pdf
 
-v18 is for now final version. Since avr code is GPL 2 - this is also releaed under GPL 2 except avr js code is MIT license - see browser window.
+v18 is for now final version. Since avr code is GPL 2 - this is also releaed under GPL 2 except avr8js code is MIT license - see browser window.
 
 
