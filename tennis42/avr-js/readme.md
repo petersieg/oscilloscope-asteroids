@@ -1,6 +1,6 @@
 ## Tennis42 with original avr code and avrjs simulation
 
-AVR code from: http://www.evilmadscientist.com/2008/resurrecting-tennis-for-two-a-video-game-from-1958
+AVR code released as GPL 2 from author from: http://www.evilmadscientist.com/2008/resurrecting-tennis-for-two-a-video-game-from-1958
 
 See file: TennisCode.zip - with HEX file
 
@@ -10,6 +10,6 @@ Inspired by: https://www.mikrocontroller.net/news/claude-code-trifft-avr-assembl
 
 ChatGPT Transcript in: Tennis42-avr-simulation.pdf
 
-v18 is for now final version.
+v18 is for now final version. Since abr code is GPL 2 - see is olso releaed under GPL 2 except avr js code is MIT license - see browser window.
 
 
