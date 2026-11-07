@@ -1,0 +1,1174 @@
+
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3d_wireframe_viewer_xy</title>
+<style>
+  body {
+    margin: 0;
+    padding: 18px;
+    background: #171717;
+    color: #eee;
+    font-family: Arial, sans-serif;
+    text-align: center;
+  }
+  h2 { margin: 5px 0 12px; }
+  canvas {
+    display: block;
+    width: min(90vw, 620px);
+    height: min(90vw, 620px);
+    margin: 12px auto;
+    background: #000;
+    border: 1px solid #444;
+  }
+  button, select {
+    margin: 5px;
+    padding: 9px 13px;
+    font-size: 14px;
+  }
+  button { cursor: pointer; }
+  #shapeName {
+    font-size: 21px;
+    margin: 10px;
+    color: #00ff66;
+  }
+  #info, #status {
+    font-size: 13px;
+    color: #aaa;
+    margin: 8px;
+  }
+  .controls { margin: 8px auto; }
+</style>
+</head>
+<body>
+
+<h2>3D XY Wireframe</h2>
+
+<canvas id="screen" width="700" height="700"></canvas>
+
+<div id="shapeName">Warte auf Start</div>
+
+<div class="controls">
+  <button id="start">XY-Audio starten</button>
+  <button id="stop">Stop</button>
+  <button id="next">Nächster Körper</button>
+</div>
+
+<div class="controls">
+  <button id="rotateAudio">XY-Drehung: 0°</button>
+  <button id="mirrorAudio">Spiegeln: Aus</button>
+</div>
+
+<div class="controls">
+  <label for="speed">Drehdauer:</label>
+  <select id="speed">
+    <option value="30">30 Sekunden</option>
+    <option value="24">24 Sekunden</option>
+    <option value="18" selected>18 Sekunden</option>
+    <option value="12">12 Sekunden</option>
+    <option value="8">8 Sekunden</option>
+  </select>
+</div>
+
+<div class="controls">
+  <label for="mode">Auswahl:</label>
+  <select id="mode">
+    <option value="random" selected>Zufällig</option>
+    <option value="sequence">Reihe nach</option>
+  </select>
+</div>
+
+<div id="info">XY-Audio: Drehung 0° | Spiegelung aus | Links = Y, Rechts = X</div>
+<div id="status">Audio gestoppt</div>
+
+<script>
+"use strict";
+
+/* =========================================================
+   GRUNDEINSTELLUNGEN
+   ========================================================= */
+
+const canvas = document.getElementById("screen");
+const ctx = canvas.getContext("2d");
+
+const SIZE = 700;
+const CENTER = SIZE / 2;
+
+const SAMPLE_RATE = 44100;
+const CHUNK_DURATION = 0.2;
+const CYCLE_DURATION = 0.05;
+const CYCLES_PER_CHUNK = 4;
+
+const SAMPLES_PER_CYCLE =
+  Math.round(SAMPLE_RATE * CYCLE_DURATION);
+
+const SAMPLES_PER_CHUNK =
+  SAMPLES_PER_CYCLE * CYCLES_PER_CHUNK;
+
+let rotationDuration = 18000;
+
+// Transformationen wirken ausschließlich auf die XY-Audioausgabe.
+let audioRotation = 0; // 0, 90, 180 oder 270 Grad im Uhrzeigersinn
+let audioMirrored = false; // Spiegelung an der vertikalen Achse (X umkehren)
+
+let audioContext = null;
+let audioRunning = false;
+let audioTimer = null;
+let nextAudioTime = 0;
+
+let sequenceMode = "random";
+let sequence = [];
+let sequenceStart = Date.now();
+let currentShapeIndex = 0;
+let sequenceCounter = 0;
+
+
+/* =========================================================
+   HILFSFUNKTIONEN FÜR 3D-KÖRPER
+   ========================================================= */
+
+function makeShape(name, vertices, edges) {
+  return { name, vertices, edges };
+}
+
+function allEdges(n) {
+  const edges = [];
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      edges.push([i, j]);
+    }
+  }
+  return edges;
+}
+
+function prism(n, height = 1.5) {
+  const vertices = [];
+
+  for (let z of [-height / 2, height / 2]) {
+    for (let i = 0; i < n; i++) {
+      const a = 2 * Math.PI * i / n;
+      vertices.push([
+        Math.cos(a),
+        Math.sin(a),
+        z
+      ]);
+    }
+  }
+
+  const edges = [];
+
+  for (let i = 0; i < n; i++) {
+    const next = (i + 1) % n;
+
+    edges.push([i, next]);
+    edges.push([i + n, next + n]);
+    edges.push([i, i + n]);
+  }
+
+  return { vertices, edges };
+}
+
+function pyramid(n) {
+  const vertices = [];
+
+  for (let i = 0; i < n; i++) {
+    const a = 2 * Math.PI * i / n;
+    vertices.push([
+      Math.cos(a),
+      Math.sin(a),
+      -0.65
+    ]);
+  }
+
+  const top = vertices.length;
+  vertices.push([0, 0, 0.9]);
+
+  const edges = [];
+
+  for (let i = 0; i < n; i++) {
+    const next = (i + 1) % n;
+    edges.push([i, next]);
+    edges.push([i, top]);
+  }
+
+  return { vertices, edges };
+}
+
+function distance(a, b) {
+  const x = a[0] - b[0];
+  const y = a[1] - b[1];
+  const z = a[2] - b[2];
+  return Math.sqrt(x*x + y*y + z*z);
+}
+
+function edgesByMinimumDistance(vertices, tolerance = 1.001) {
+  let min = Infinity;
+
+  for (let i = 0; i < vertices.length; i++) {
+    for (let j = i + 1; j < vertices.length; j++) {
+      min = Math.min(min, distance(vertices[i], vertices[j]));
+    }
+  }
+
+  const edges = [];
+
+  for (let i = 0; i < vertices.length; i++) {
+    for (let j = i + 1; j < vertices.length; j++) {
+      const d = distance(vertices[i], vertices[j]);
+      if (d <= min * tolerance) edges.push([i, j]);
+    }
+  }
+
+  return edges;
+}
+
+
+/* =========================================================
+   PLATONISCHE KÖRPER
+   ========================================================= */
+
+// Würfel
+const cubeVertices = [];
+for (let x of [-1, 1])
+for (let y of [-1, 1])
+for (let z of [-1, 1])
+  cubeVertices.push([x, y, z]);
+
+const cubeEdges = edgesByMinimumDistance(cubeVertices);
+
+const cube = makeShape(
+  "Würfel",
+  cubeVertices,
+  cubeEdges
+);
+
+
+// Tetraeder
+const tetraVertices = [
+  [1, 1, 1],
+  [-1, -1, 1],
+  [-1, 1, -1],
+  [1, -1, -1]
+];
+
+const tetra = makeShape(
+  "Tetraeder",
+  tetraVertices,
+  allEdges(4)
+);
+
+
+// Oktaeder
+const octaVertices = [
+  [1,0,0], [-1,0,0],
+  [0,1,0], [0,-1,0],
+  [0,0,1], [0,0,-1]
+];
+
+const octa = makeShape(
+  "Oktaeder",
+  octaVertices,
+  edgesByMinimumDistance(octaVertices)
+);
+
+
+// Ikosaeder
+const PHI = (1 + Math.sqrt(5)) / 2;
+
+const icoVertices = [];
+
+for (let a of [-1, 1])
+for (let b of [-PHI, PHI]) {
+  icoVertices.push([0, a, b]);
+  icoVertices.push([a, b, 0]);
+  icoVertices.push([b, 0, a]);
+}
+
+const icoEdges = edgesByMinimumDistance(icoVertices);
+
+const icosa = makeShape(
+  "Ikosaeder",
+  icoVertices,
+  icoEdges
+);
+
+
+// Dodekaeder als Dual des Ikosaeders
+function createDodecahedron() {
+  const faces = [];
+  const min = Math.min(
+    ...icoEdges.map(e =>
+      distance(icoVertices[e[0]], icoVertices[e[1]])
+    )
+  );
+
+  for (let i = 0; i < icoVertices.length; i++) {
+    for (let j = i + 1; j < icoVertices.length; j++) {
+      for (let k = j + 1; k < icoVertices.length; k++) {
+        const a = distance(icoVertices[i], icoVertices[j]);
+        const b = distance(icoVertices[j], icoVertices[k]);
+        const c = distance(icoVertices[k], icoVertices[i]);
+
+        if (
+          Math.abs(a-min) < 0.001 &&
+          Math.abs(b-min) < 0.001 &&
+          Math.abs(c-min) < 0.001
+        ) {
+          faces.push([i,j,k]);
+        }
+      }
+    }
+  }
+
+  const vertices = faces.map(face => {
+    let x = 0, y = 0, z = 0;
+
+    for (const i of face) {
+      x += icoVertices[i][0];
+      y += icoVertices[i][1];
+      z += icoVertices[i][2];
+    }
+
+    return [x/3, y/3, z/3];
+  });
+
+  const edges = [];
+
+  for (let i = 0; i < faces.length; i++) {
+    for (let j = i + 1; j < faces.length; j++) {
+      const shared = faces[i].filter(v => faces[j].includes(v));
+      if (shared.length === 2) edges.push([i,j]);
+    }
+  }
+
+  return makeShape("Dodekaeder", vertices, edges);
+}
+
+const dodeca = createDodecahedron();
+
+
+/* =========================================================
+   WEITERE EINFACHE KÖRPER
+   ========================================================= */
+
+// Quadratische Pyramide
+const squarePyramidData = pyramid(4);
+const squarePyramid = makeShape(
+  "Quadratische Pyramide",
+  squarePyramidData.vertices,
+  squarePyramidData.edges
+);
+
+// Fünfeckige Pyramide
+const pentPyramidData = pyramid(5);
+const pentPyramid = makeShape(
+  "Fünfeckige Pyramide",
+  pentPyramidData.vertices,
+  pentPyramidData.edges
+);
+
+// Dreiecksprisma
+const triPrismData = prism(3);
+const triPrism = makeShape(
+  "Dreiecksprisma",
+  triPrismData.vertices,
+  triPrismData.edges
+);
+
+// Sechseckprisma
+const hexPrismData = prism(6);
+const hexPrism = makeShape(
+  "Sechseckprisma",
+  hexPrismData.vertices,
+  hexPrismData.edges
+);
+
+// Achteckprisma
+const octPrismData = prism(8);
+const octPrism = makeShape(
+  "Achteckprisma",
+  octPrismData.vertices,
+  octPrismData.edges
+);
+
+// Rhombendodekaeder
+const rhombVertices = [
+  [ 2,0,0],[-2,0,0],
+  [0,2,0],[0,-2,0],
+  [0,0,2],[0,0,-2]
+];
+
+for (let x of [-1,1])
+for (let y of [-1,1])
+for (let z of [-1,1])
+  rhombVertices.push([x,y,z]);
+
+const rhombEdges = edgesByMinimumDistance(rhombVertices);
+
+const rhombDodeca = makeShape(
+  "Rhombendodekaeder",
+  rhombVertices,
+  rhombEdges
+);
+
+// Dreieckige Doppelpyramide
+const bipyramidVertices = [
+  [0,0,1.5],
+  [0,0,-1.5],
+  [1,0,0],
+  [-0.5,0.866,0],
+  [-0.5,-0.866,0]
+];
+
+const bipyramidEdges = [
+  [0,2],[0,3],[0,4],
+  [1,2],[1,3],[1,4],
+  [2,3],[3,4],[4,2]
+];
+
+const bipyramid = makeShape(
+  "Dreieckige Doppelpyramide",
+  bipyramidVertices,
+  bipyramidEdges
+);
+
+
+/* =========================================================
+   HACKADAY-EMBLEM (SCHEMATISCH)
+   Skull mit gekreuzten Werkzeugen, als Drahtmodell
+   ========================================================= */
+
+function createHackadayEmblem() {
+  const points = [];
+  const edges = [];
+
+  function line(points2D) {
+    const start = points.length;
+
+    for (const p of points2D) {
+      points.push([p[0], p[1], 0]);
+    }
+
+    for (let i = 0; i < points2D.length - 1; i++) {
+      edges.push([start+i, start+i+1]);
+    }
+
+    return start;
+  }
+
+  // Gekreuzter Schraubendreher
+  line([
+    [-1.0,-0.95],
+    [-0.82,-0.78],
+    [0.78,0.82],
+    [1.0,1.0]
+  ]);
+
+  // Gekreuzter Schraubenschlüssel
+  line([
+    [-1.0,0.95],
+    [-0.8,0.75],
+    [0.8,-0.75],
+    [1.0,-0.95]
+  ]);
+
+  // Schädelumriss
+  const skull = [
+    [-0.48,0.55],[-0.62,0.35],[-0.65,0.02],
+    [-0.55,-0.32],[-0.35,-0.52],
+    [-0.30,-0.72],[0.30,-0.72],
+    [0.35,-0.52],[0.55,-0.32],
+    [0.65,0.02],[0.62,0.35],[0.48,0.55],
+    [0.25,0.68],[-0.25,0.68],[-0.48,0.55]
+  ];
+
+  line(skull);
+
+  // Augen
+  line([
+    [-0.43,0.20],[-0.18,0.02],
+    [-0.05,0.20],[-0.18,0.38],
+    [-0.43,0.20]
+  ]);
+
+  line([
+    [0.43,0.20],[0.18,0.02],
+    [0.05,0.20],[0.18,0.38],
+    [0.43,0.20]
+  ]);
+
+  // Nase
+  line([
+    [0,-0.02],[-0.09,-0.27],[0.09,-0.27],[0,-0.02]
+  ]);
+
+  // Zähne / Kiefer
+  line([
+    [-0.30,-0.48],[-0.15,-0.42],
+    [0,-0.48],[0.15,-0.42],[0.30,-0.48]
+  ]);
+
+  // Extrusion nach vorne und hinten
+  const originalCount = points.length;
+  const vertices = [];
+
+  for (const z of [-0.25, 0.25]) {
+    for (const p of points) {
+      vertices.push([p[0], p[1], z]);
+    }
+  }
+
+  const all = [...edges];
+
+  for (const [a,b] of edges) {
+    all.push([a+originalCount,b+originalCount]);
+  }
+
+  for (let i = 0; i < originalCount; i++) {
+    all.push([i,i+originalCount]);
+  }
+
+  return makeShape(
+    "Hackaday-Emblem (schematisch)",
+    vertices,
+    all
+  );
+}
+
+const hackaday = createHackadayEmblem();
+
+
+
+/* =========================================================
+   VEREINFACHTE KLASSISCHE 3D-MODELLE
+   Prozedural erzeugte Drahtgitter; vollständig im HTML-Code.
+   ========================================================= */
+
+function wireModel(name) {
+  return {
+    name,
+    vertices: [],
+    edges: [],
+    polyline(points, closed = false) {
+      const start = this.vertices.length;
+      this.vertices.push(...points);
+      for (let i = 0; i < points.length - 1; i++) {
+        this.edges.push([start + i, start + i + 1]);
+      }
+      if (closed && points.length > 2) {
+        this.edges.push([start + points.length - 1, start]);
+      }
+    },
+    ellipsoid(center, radii, ringCount = 5, sides = 12) {
+      const [cx, cy, cz] = center;
+      const [rx, ry, rz] = radii;
+      const rings = [];
+      for (let r = 0; r < ringCount; r++) {
+        const lat = -Math.PI / 2 + (r + 1) * Math.PI / (ringCount + 1);
+        const ring = [];
+        for (let j = 0; j < sides; j++) {
+          const a = 2 * Math.PI * j / sides;
+          ring.push(this.vertices.length);
+          this.vertices.push([
+            cx + rx * Math.cos(lat) * Math.cos(a),
+            cy + ry * Math.sin(lat),
+            cz + rz * Math.cos(lat) * Math.sin(a)
+          ]);
+        }
+        this.polyline(ring.map(i => this.vertices[i]), true);
+        rings.push(ring);
+      }
+      // Längslinien verbinden die Ringe.
+      for (let j = 0; j < sides; j += 2) {
+        for (let r = 0; r < rings.length - 1; r++) {
+          this.edges.push([rings[r][j], rings[r + 1][j]]);
+        }
+      }
+    },
+    tube(points, radius, sides = 6) {
+      const rings = [];
+      for (let i = 0; i < points.length; i++) {
+        const p = points[i];
+        const prev = points[Math.max(0, i - 1)];
+        const next = points[Math.min(points.length - 1, i + 1)];
+        let tx = next[0] - prev[0];
+        let ty = next[1] - prev[1];
+        let tz = next[2] - prev[2];
+        const tl = Math.hypot(tx, ty, tz) || 1;
+        tx /= tl; ty /= tl; tz /= tl;
+
+        // Stabiler lokaler Querschnitt senkrecht zur Röhrenachse.
+        let ax = -ty, ay = tx, az = 0;
+        let al = Math.hypot(ax, ay, az);
+        if (al < 0.001) { ax = 1; ay = 0; az = 0; al = 1; }
+        ax /= al; ay /= al; az /= al;
+        const bx = ty * az - tz * ay;
+        const by = tz * ax - tx * az;
+        const bz = tx * ay - ty * ax;
+
+        const ring = [];
+        for (let j = 0; j < sides; j++) {
+          const a = 2 * Math.PI * j / sides;
+          ring.push(this.vertices.length);
+          this.vertices.push([
+            p[0] + radius * (ax * Math.cos(a) + bx * Math.sin(a)),
+            p[1] + radius * (ay * Math.cos(a) + by * Math.sin(a)),
+            p[2] + radius * (az * Math.cos(a) + bz * Math.sin(a))
+          ]);
+        }
+        this.edges.push(...ring.map((v, j) => [v, ring[(j + 1) % sides]]));
+        rings.push(ring);
+      }
+      for (let i = 0; i < rings.length - 1; i++) {
+        for (let j = 0; j < sides; j += 2) {
+          this.edges.push([rings[i][j], rings[i + 1][j]]);
+        }
+      }
+    },
+    finish() {
+      return makeShape(this.name, this.vertices, this.edges);
+    }
+  };
+}
+
+// Utah-Teekanne: Bauch, Hals, Deckel, Knauf, Ausguss und Henkel.
+function createTeapot() {
+  const m = wireModel("Teekanne (vereinfacht)");
+  m.ellipsoid([0, -0.05, 0], [0.82, 0.68, 0.72], 6, 14);
+  m.ellipsoid([0, 0.57, 0], [0.43, 0.16, 0.40], 2, 14);
+  m.ellipsoid([0, 0.76, 0], [0.48, 0.075, 0.44], 1, 14);
+  m.tube([[0,0.82,0],[0,0.96,0],[0,1.05,0]], 0.075, 8);
+  // Ausguss steigt nach außen an.
+  m.tube([[0.62,0.12,0],[0.88,0.22,0],[1.12,0.40,0],[1.34,0.58,0],[1.48,0.62,0]], 0.13, 7);
+  // Henkel als offene, gebogene Röhrenform.
+  m.tube([[-0.67,0.40,0],[-1.02,0.42,0],[-1.24,0.18,0],[-1.25,-0.20,0],[-1.02,-0.48,0],[-0.68,-0.48,0]], 0.085, 6);
+  return m.finish();
+}
+
+// Stanford Bunny: kompakte Silhouette mit Kopf, Ohren, Körper und Läufen.
+function createBunny() {
+  const m = wireModel("Stanford Bunny (vereinfacht)");
+  m.ellipsoid([0,-0.12,0], [0.76,0.48,0.43], 5, 12);       // Körper
+  m.ellipsoid([0.56,0.28,0.02], [0.38,0.37,0.34], 5, 12); // Kopf
+  m.ellipsoid([0.86,0.12,0.03], [0.22,0.16,0.22], 3, 10);// Schnauze
+  m.ellipsoid([-0.72,0.02,0], [0.20,0.20,0.22], 3, 10);// Schwanz
+  // Aufrechte, leicht nach außen geneigte Ohren.
+  m.tube([[0.43,0.53,0],[0.39,0.82,0],[0.34,1.13,0],[0.38,1.40,0]], 0.105, 6);
+  m.tube([[0.68,0.53,0.10],[0.78,0.83,0.10],[0.88,1.10,0.10],[0.92,1.32,0.10]], 0.095, 6);
+  // Beine und Vorderläufe.
+  m.tube([[-0.42,-0.35,0],[-0.48,-0.67,0],[-0.20,-0.72,0]], 0.12, 6);
+  m.tube([[0.35,-0.32,0],[0.26,-0.62,0],[0.52,-0.68,0]], 0.10, 6);
+  m.tube([[0.70,-0.02,0.20],[0.48,-0.38,0.23],[0.22,-0.50,0.20]], 0.075, 6);
+  // Auge und Nase als kurze Drahtzüge.
+  m.polyline([[0.72,0.36,0.31],[0.78,0.39,0.31],[0.82,0.35,0.31]]);
+  m.polyline([[1.02,0.16,0.10],[1.08,0.13,0.10],[1.02,0.10,0.10]]);
+  return m.finish();
+}
+
+// Büste: Schultern, Hals und Kopf mit vereinfachten Gesichtszügen.
+function createBust() {
+  const m = wireModel("Gesicht / Büste (vereinfacht)");
+  m.ellipsoid([0,-0.88,0], [0.92,0.38,0.48], 4, 14); // Schultern
+  m.ellipsoid([0,-0.42,0], [0.36,0.52,0.34], 4, 12); // Hals
+  m.ellipsoid([0,0.35,0], [0.62,0.82,0.53], 7, 14);  // Schädel/Gesicht
+  // Kinn- und Kieferkontur
+  m.polyline([[-0.48,0.05,0.30],[-0.40,-0.30,0.32],[-0.20,-0.48,0.34],[0,-0.53,0.35],[0.20,-0.48,0.34],[0.40,-0.30,0.32],[0.48,0.05,0.30]]);
+  // Nase als hervortretender Steg
+  m.tube([[0,0.28,0.50],[0,0.02,0.62],[0,-0.12,0.69],[0.10,-0.18,0.60]], 0.055, 5);
+  // Augenbrauen und Augen
+  m.polyline([[-0.43,0.40,0.43],[-0.25,0.48,0.48],[-0.08,0.42,0.50]]);
+  m.polyline([[0.08,0.42,0.50],[0.25,0.48,0.48],[0.43,0.40,0.43]]);
+  m.polyline([[-0.40,0.28,0.47],[-0.25,0.24,0.52],[-0.10,0.28,0.52]]);
+  m.polyline([[0.10,0.28,0.52],[0.25,0.24,0.52],[0.40,0.28,0.47]]);
+  // Mund
+  m.polyline([[-0.22,-0.27,0.47],[-0.10,-0.30,0.51],[0,-0.28,0.53],[0.10,-0.30,0.51],[0.22,-0.27,0.47]]);
+  // Ohren seitlich
+  m.ellipsoid([-0.61,0.12,0], [0.13,0.27,0.16], 3, 8);
+  m.ellipsoid([0.61,0.12,0], [0.13,0.27,0.16], 3, 8);
+  return m.finish();
+}
+
+const teapot = createTeapot();
+const bunny = createBunny();
+const bust = createBust();
+
+
+/* =========================================================
+   KÖRPERLISTE
+   ========================================================= */
+
+const shapes = [
+  cube,
+  tetra,
+  octa,
+  icosa,
+  dodeca,
+  squarePyramid,
+  pentPyramid,
+  triPrism,
+  hexPrism,
+  octPrism,
+  rhombDodeca,
+  bipyramid,
+  hackaday,
+  teapot,
+  bunny,
+  bust
+];
+
+
+/* =========================================================
+   ZUFALLS-SEQUENZ
+   ========================================================= */
+
+function nextRandomIndex(previous) {
+  if (shapes.length <= 1) return 0;
+
+  let index;
+
+  do {
+    index = Math.floor(Math.random() * shapes.length);
+  } while (index === previous);
+
+  return index;
+}
+
+function resetSequence() {
+  sequence = [{
+    start: Date.now(),
+    index: currentShapeIndex
+  }];
+
+  sequenceStart = sequence[0].start;
+}
+
+function ensureSequence(timeMs) {
+  if (sequence.length === 0) resetSequence();
+
+  while (
+    sequence[sequence.length - 1].start + rotationDuration <= timeMs
+  ) {
+    const last = sequence[sequence.length - 1];
+    const next = sequenceMode === "random"
+      ? nextRandomIndex(last.index)
+      : (last.index + 1) % shapes.length;
+
+    sequence.push({
+      start: last.start + rotationDuration,
+      index: next
+    });
+  }
+}
+
+function shapeAt(timeMs) {
+  ensureSequence(timeMs);
+
+  let item = sequence[0];
+
+  for (const entry of sequence) {
+    if (entry.start <= timeMs) item = entry;
+    else break;
+  }
+
+  return {
+    index: item.index,
+    shape: shapes[item.index],
+    angle: ((timeMs - item.start) / rotationDuration) * Math.PI * 2,
+    start: item.start
+  };
+}
+
+
+/* =========================================================
+   3D-ROTATION UND PERSPEKTIVE
+   ========================================================= */
+
+function projectPoint(point, angle) {
+  const [x, y, z] = point;
+
+  // Rotation um Y-Achse
+  const x1 = x * Math.cos(angle) - z * Math.sin(angle);
+  const z1 = x * Math.sin(angle) + z * Math.cos(angle);
+
+  // Leichte feste Neigung um X-Achse
+  const tilt = 0.28;
+  const y2 = y * Math.cos(tilt) - z1 * Math.sin(tilt);
+  const z2 = y * Math.sin(tilt) + z1 * Math.cos(tilt);
+
+  const camera = 4.5;
+  const perspective = camera / (camera + z2);
+
+  const scale = 220 * perspective;
+
+  return {
+    x: x1 * scale,
+    y: -y2 * scale
+  };
+}
+
+
+/* =========================================================
+   KANTENPFAD
+   ========================================================= */
+
+function buildPath(shape, angle) {
+  const projected = shape.vertices.map(v => projectPoint(v, angle));
+
+  const unused = shape.edges.map(e => [e[0],e[1]]);
+  const segments = [];
+
+  let current = 0;
+
+  while (unused.length > 0) {
+    let bestIndex = 0;
+    let bestReverse = false;
+    let bestDistance = Infinity;
+
+    for (let i = 0; i < unused.length; i++) {
+      const [a,b] = unused[i];
+
+      const da = Math.hypot(
+        projected[a].x - projected[current].x,
+        projected[a].y - projected[current].y
+      );
+
+      const db = Math.hypot(
+        projected[b].x - projected[current].x,
+        projected[b].y - projected[current].y
+      );
+
+      if (da < bestDistance) {
+        bestDistance = da;
+        bestIndex = i;
+        bestReverse = false;
+      }
+
+      if (db < bestDistance) {
+        bestDistance = db;
+        bestIndex = i;
+        bestReverse = true;
+      }
+    }
+
+    const edge = unused.splice(bestIndex,1)[0];
+
+    const a = bestReverse ? edge[1] : edge[0];
+    const b = bestReverse ? edge[0] : edge[1];
+
+    const p1 = projected[a];
+    const p2 = projected[b];
+
+    if (current !== a) {
+      segments.push({
+        a: projected[current],
+        b: p1,
+        connector: true
+      });
+    }
+
+    segments.push({
+      a: p1,
+      b: p2,
+      connector: false
+    });
+
+    segments.push({
+      a: p2,
+      b: p1,
+      connector: false
+    });
+
+    current = a;
+  }
+
+  return segments;
+}
+
+
+/* =========================================================
+   ZEITVERTEILUNG DER XY-VEKTOREN
+   ========================================================= */
+
+function samplePath(segments, sampleCount) {
+  const weighted = segments.map(segment => {
+    const dx = segment.b.x - segment.a.x;
+    const dy = segment.b.y - segment.a.y;
+    const length = Math.hypot(dx,dy);
+
+    return {
+      ...segment,
+      weight: length * (segment.connector ? 0.045 : 1)
+    };
+  });
+
+  const totalWeight = weighted.reduce(
+    (sum,s) => sum+s.weight,0
+  );
+
+  const xs = new Float32Array(sampleCount);
+  const ys = new Float32Array(sampleCount);
+
+  let segmentIndex = 0;
+  let segmentStart = 0;
+
+  for (let i = 0; i < sampleCount; i++) {
+    const position = i / sampleCount * totalWeight;
+
+    while (
+      segmentIndex < weighted.length-1 &&
+      position >= segmentStart + weighted[segmentIndex].weight
+    ) {
+      segmentStart += weighted[segmentIndex].weight;
+      segmentIndex++;
+    }
+
+    const s = weighted[segmentIndex];
+
+    const t = s.weight > 0
+      ? (position-segmentStart)/s.weight
+      : 0;
+
+    const u = Math.max(0,Math.min(1,t));
+
+    xs[i] = (s.a.x+(s.b.x-s.a.x)*u)/250;
+    ys[i] = (s.a.y+(s.b.y-s.a.y)*u)/250;
+  }
+
+  return { xs, ys };
+}
+
+
+/* =========================================================
+   AUDIOBLOCK ERZEUGEN
+   ========================================================= */
+
+function createAudioBuffer(startTime) {
+  const buffer = audioContext.createBuffer(
+    2,
+    SAMPLES_PER_CHUNK,
+    SAMPLE_RATE
+  );
+
+  const left = buffer.getChannelData(0);
+  const right = buffer.getChannelData(1);
+
+  const epoch =
+    Date.now() +
+    (startTime-audioContext.currentTime)*1000;
+
+  for (let cycle = 0; cycle < CYCLES_PER_CHUNK; cycle++) {
+    const time = epoch + cycle*CYCLE_DURATION*1000;
+    const state = shapeAt(time);
+
+    const segments = buildPath(
+      state.shape,
+      state.angle
+    );
+
+    const vectors = samplePath(
+      segments,
+      SAMPLES_PER_CYCLE
+    );
+
+    const offset = cycle*SAMPLES_PER_CYCLE;
+
+    for (let i = 0; i < SAMPLES_PER_CYCLE; i++) {
+      const index = offset+i;
+
+      // Spiegelung und Drehung ausschließlich für die XY-Audioausgabe.
+      // Die Browser-Vorschau und 3D-Projektion bleiben unverändert.
+      let x = vectors.xs[i];
+      let y = vectors.ys[i];
+
+      // Spiegelung an der vertikalen Achse: X umkehren.
+      if (audioMirrored) x = -x;
+
+      // Drehung im Uhrzeigersinn in 90°-Schritten.
+      let rotatedX = x;
+      let rotatedY = y;
+      if (audioRotation === 90) {
+        rotatedX = y;
+        rotatedY = -x;
+      } else if (audioRotation === 180) {
+        rotatedX = -x;
+        rotatedY = -y;
+      } else if (audioRotation === 270) {
+        rotatedX = -y;
+        rotatedY = x;
+      }
+
+      // Links = Y, Rechts = X.
+      left[index] = rotatedY*0.85;
+      right[index] = rotatedX*0.85;
+    }
+  }
+
+  return buffer;
+}
+
+
+/* =========================================================
+   AUDIO SCHEDULER
+   ========================================================= */
+
+function scheduleAudio() {
+  if (!audioRunning || !audioContext) return;
+
+  const now = audioContext.currentTime;
+  const ahead = 0.65;
+
+  while (nextAudioTime < now+ahead) {
+    const buffer = createAudioBuffer(nextAudioTime);
+    const source = audioContext.createBufferSource();
+
+    source.buffer = buffer;
+    source.connect(audioContext.destination);
+    source.start(nextAudioTime);
+
+    nextAudioTime += CHUNK_DURATION;
+  }
+}
+
+async function startAudio() {
+  if (audioRunning) return;
+
+  try {
+    const AudioContextClass =
+      window.AudioContext || window.webkitAudioContext;
+
+    audioContext = new AudioContextClass({
+      sampleRate: SAMPLE_RATE
+    });
+
+    await audioContext.resume();
+
+    audioRunning = true;
+    nextAudioTime = audioContext.currentTime+0.1;
+
+    resetSequence();
+
+    scheduleAudio();
+    audioTimer = setInterval(scheduleAudio,40);
+
+    updateTransformLabels();
+    document.getElementById("status").textContent =
+      "XY-Audio läuft";
+
+  } catch(error) {
+    document.getElementById("status").textContent =
+      "Audiofehler: "+error.message;
+  }
+}
+
+async function stopAudio() {
+  audioRunning = false;
+
+  if (audioTimer) {
+    clearInterval(audioTimer);
+    audioTimer = null;
+  }
+
+  if (audioContext) {
+    await audioContext.close();
+    audioContext = null;
+  }
+
+  document.getElementById("status").textContent =
+    "Audio gestoppt";
+}
+
+
+/* =========================================================
+   BROWSER-VORSCHAU
+   ========================================================= */
+
+function drawPreview() {
+  const now = Date.now();
+  const state = shapeAt(now);
+
+  ctx.clearRect(0,0,SIZE,SIZE);
+  ctx.save();
+  ctx.translate(CENTER,CENTER);
+
+  const segments = buildPath(state.shape,state.angle);
+
+  ctx.strokeStyle = "#00ff55";
+  ctx.lineWidth = 2.0;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  for (const s of segments) {
+    ctx.beginPath();
+    ctx.moveTo(s.a.x,s.a.y);
+    ctx.lineTo(s.b.x,s.b.y);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+
+  const name = state.shape.name;
+  document.getElementById("shapeName").textContent = name;
+
+  requestAnimationFrame(drawPreview);
+}
+
+
+/* =========================================================
+   BEDIENUNG
+   ========================================================= */
+
+function updateTransformLabels() {
+  const rotationButton = document.getElementById("rotateAudio");
+  const mirrorButton = document.getElementById("mirrorAudio");
+  const info = document.getElementById("info");
+
+  rotationButton.textContent = `XY-Drehung: ${audioRotation}°`;
+  mirrorButton.textContent = `Spiegeln: ${audioMirrored ? "Ein" : "Aus"}`;
+  info.textContent =
+    `XY-Audio: Drehung ${audioRotation}° | Spiegelung ${audioMirrored ? "ein" : "aus"} | Links = Y, Rechts = X`;
+}
+
+document.getElementById("rotateAudio").addEventListener("click", () => {
+  audioRotation = (audioRotation + 90) % 360;
+  updateTransformLabels();
+});
+
+document.getElementById("mirrorAudio").addEventListener("click", () => {
+  audioMirrored = !audioMirrored;
+  updateTransformLabels();
+});
+
+document.getElementById("start").addEventListener(
+  "click",startAudio
+);
+
+document.getElementById("stop").addEventListener(
+  "click",stopAudio
+);
+
+document.getElementById("next").addEventListener("click",() => {
+  currentShapeIndex = nextRandomIndex(currentShapeIndex);
+  sequence = [{
+    start: Date.now(),
+    index: currentShapeIndex
+  }];
+});
+
+document.getElementById("speed").addEventListener("change",e => {
+  rotationDuration = Number(e.target.value)*1000;
+  resetSequence();
+});
+
+document.getElementById("mode").addEventListener("change",e => {
+  sequenceMode = e.target.value;
+  resetSequence();
+});
+
+updateTransformLabels();
+drawPreview();
+
+</script>
+</body>
+</html>
